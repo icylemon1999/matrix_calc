@@ -1,56 +1,133 @@
-// ¶¥²ãÄ£¿é£º¾ØÕó¼ÆËãÏµÍ³
-// ¹¦ÄÜ£ºÕûºÏ¿ØÖÆ FSM¡¢ÊıÂë¹ÜÏÔÊ¾¡¢LED ×´Ì¬Ö¸Ê¾£¬ÒÔ¼° UART ½Ó¿Ú
+// é¡¶å±‚æ¨¡å—ï¼šçŸ©é˜µè®¡ç®—ç³»ç»Ÿ
+// åŠŸèƒ½ï¼šé›†æˆæ§åˆ¶FSMã€æ•°ç ç®¡æ˜¾ç¤ºã€LEDçŠ¶æ€æŒ‡ç¤ºä»¥åŠUARTæ¥å£
 module matrix_calc_top(
-    input clk,               // ÏµÍ³Ê±ÖÓ
-    input rst_n,             // ¸´Î»ĞÅºÅ£¬µÍÓĞĞ§
-    input [3:0] dip_switch,  // DIP ¿ª¹Ø£¬ÓÃÓÚÄ£Ê½Ñ¡Ôñ
-    input button_confirm,    // °´¼üÈ·ÈÏÊäÈë
-    input uart_rx,           // UART ½ÓÊÕ¶Ë¿Ú
-    output uart_tx,          // UART ·¢ËÍ¶Ë¿Ú
-    output [7:0] leds,       // LED ×´Ì¬Ö¸Ê¾
-    output [6:0] seg_display // 7 ¶ÎÊıÂë¹ÜÏÔÊ¾
+    input clk,               // ç³»ç»Ÿæ—¶é’Ÿ
+    input rst,               // å¤ä½ä¿¡å·ï¼Œä½æœ‰æ•ˆ
+    input [3:0] dip_switch,  // DIPå¼€å…³ï¼Œç”¨äºæ¨¡å¼é€‰æ‹©
+    input button_confirm,    // æŒ‰é’®ç¡®è®¤è¾“å…¥
+    input uart_rx,           // UARTæ¥æ”¶ç«¯å£
+    output uart_tx,          // UARTå‘é€ç«¯å£
+    output [7:0] leds,       // LEDçŠ¶æ€æŒ‡ç¤º
+    output [6:0] seg_display, // 7æ®µæ•°ç ç®¡æ˜¾ç¤º
+    output tub_sel1          // æ•°ç ç®¡ä½é€‰ä¿¡å·
 );
- 
-    // ÄÚ²¿ĞÅºÅ
-    wire [3:0] state;        // µ±Ç°×´Ì¬»ú×´Ì¬£¨¸ÄÎª4Î»£©
-    wire start_calc;         // FSM ·¢³öµÄ¿ªÊ¼¼ÆËãĞÅºÅ
-    wire calc_done;          // ÔËËãÍê³É±êÖ¾
-    wire error_flag;         // ÏµÍ³´íÎó±êÖ¾
-    wire [3:0] op_type;      // ÔËËãÀàĞÍĞÅºÅ
-    wire countdown_done;     // µ¹¼ÆÊ±Íê³ÉĞÅºÅ
-    wire start_countdown;    // Æô¶¯µ¹¼ÆÊ±ĞÅºÅ
 
-    // ¿ØÖÆ FSM Ä£¿é
-    controller_fsm u_ctrl (
-        .clk(clk), 
-        .rst_n(rst_n),
-        .button(button_confirm),  // °´¼üÊäÈë
-        .mode_sel(dip_switch),    // Ä£Ê½Ñ¡Ôñ
-        .calc_done(calc_done),    // ¼ÆËãÍê³ÉÊäÈë
-        .error_in(error_flag),    // ´íÎóÊäÈë
-        .countdown_done(countdown_done),  // µ¹¼ÆÊ±Íê³ÉÊäÈë
-        .state(state),            // Êä³öµ±Ç°×´Ì¬
-        .start_calc(start_calc),  // Êä³ö¿ªÊ¼¼ÆËãĞÅºÅ
-        .op_type(op_type),        // Êä³öÔËËãÀàĞÍ
-        .error_led(leds[7]),     // ´íÎóLEDµ¥¶À¿ØÖÆ
-        .start_countdown(start_countdown) // Êä³öÆô¶¯µ¹¼ÆÊ±
+    // ================================
+    // å†…éƒ¨ä¿¡å·å®šä¹‰
+    // ================================
+    wire rst_n = ~rst;
+
+    wire [3:0] state;        // å½“å‰çŠ¶æ€
+    wire start_calc;         // å¼€å§‹è®¡ç®—
+    wire [3:0] op_type;      // æ“ä½œç±»å‹
+    wire error_flag;         // é”™è¯¯æ ‡å¿—
+    wire start_countdown;    // å€’è®¡æ—¶å¯åŠ¨ä¿¡å·
+    wire button_debounced;   // é˜²æŠ–åæŒ‰é”®
+
+    // è®¡ç®—å®Œæˆä¸é”™è¯¯ä¿¡å·ï¼ˆåç»­ä¼šæ¥å®é™…è®¡ç®—æ¨¡å—ï¼‰
+    assign error_flag = 1'b0;
+    assign calc_done = 1'b0;
+
+    // UARTé»˜è®¤æœªå®ç°
+    assign uart_tx = 1'b0;
+
+
+    // ================================
+    // é˜²æŠ–æ¨¡å—
+    // ================================
+    debounce u_debounce (
+        .clk(clk),
+        .button_in(button_confirm),
+        .button_out(button_debounced)
     );
 
-    // ÊıÂë¹ÜÏÔÊ¾Ä£¿é
+
+    // ================================
+    // FSM ä¸»æ§åˆ¶å™¨
+    // ================================
+controller_fsm u_ctrl (
+        .clk(clk),
+        .rst_n(rst_n),
+        .button(button_confirm), // ç›´æ¥ç”¨åŸå§‹ä¿¡å·
+        .mode_sel(dip_switch),
+        .calc_done(calc_done),
+        .error_in(error_flag),
+        .state(state),
+        .start_calc(start_calc),
+        .op_type(op_type),
+        .error_led(leds[7]),
+        .start_countdown(start_countdown)
+    );
+
+
+    // ================================
+    // æ•°ç ç®¡æ˜¾ç¤º
+    // ================================
+    assign tub_sel1 = 1'b1;  
+
     seg_display u_seg (
         .clk(clk),
-        .state(state),           // ¸ù¾İ×´Ì¬ÏÔÊ¾¶ÔÓ¦ĞÅÏ¢
-        .op_type(op_type),       // ÔËËãÀàĞÍÊäÈë
+        .state(state),
+        .op_type(op_type),
         .seg(seg_display)
     );
 
-    // LED Ö¸Ê¾Ä£¿é
+
+    // ================================
+    // LED çŠ¶æ€æŒ‡ç¤º
+    // ================================
     led_status u_led (
-        .state(state),           // ¸ù¾İ×´Ì¬µãÁÁ¶ÔÓ¦ LED
-        .leds(leds[6:0])         // Ö»¿ØÖÆÇ°7¸öLED£¬LED7ÓÉFSMµ¥¶À¿ØÖÆ
+        .state(state),
+        .leds(leds[6:0]) // ä½7ä½ç”±çŠ¶æ€æ§åˆ¶
     );
 
-    // ÆäËûÄ£¿é£¨UART¡¢´æ´¢¡¢ÔËËã£©B ºÍ C ÊµÏÖ
-    // ÕâÀïĞèÒªÁ¬½Ó calc_done, error_flag, countdown_done µÈĞÅºÅ
+
+    // ================================
+    // åŠ ä¸€äº›Bã€Cçš„æ¥å£ï¼Œä½†æš‚æ—¶ä¸ä¸Šç‰ˆæµ‹è¯•ï¼Œå› ä¸ºåŠŸèƒ½ä¸é½å…¨
+    // ä»¥åè‹¥æœ‰æ›´æ”¹ï¼Œéœ€åœ¨é¡¶å±‚è°ƒæ•´
+    // ================================
+
+    
+    // // æ–°å¢å¯„å­˜å™¨/ä¿¡å·
+    // reg [3:0] m_cur, n_cur;        // å½“å‰è¾“å…¥çŸ©é˜µç»´åº¦
+    // reg [7:0] matrix_buffer[0:4][0:4]; // å½“å‰è¾“å…¥/ç”ŸæˆçŸ©é˜µç¼“å†²
+    // reg input_valid;
+    // reg gen_mode;                  // ç”Ÿæˆæ¨¡å¼æ ‡å¿—
+    // reg [7:0] gen_count, gen_total;
+    // reg [7:0] rand_seed;
+
+    // // UART RX æ¥æ”¶å®Œæˆä¿¡å·
+    // wire rx_done;
+    // wire [7:0] rx_data;
+    // uart_rx uart_rx_inst(
+    //     .clk(clk),
+    //     .rst_n(rst_n),
+    //     .rx(uart_rx),
+    //     .rx_data(rx_data),
+    //     .rx_done(rx_done)
+    // );
+
+    // // æ¥æ”¶æ•°æ®å¤„ç†é€»è¾‘
+    // always @(posedge clk or negedge rst_n) begin
+    //     if(!rst_n) begin
+    //         m_cur <= 0; n_cur <= 0; input_valid <= 0; gen_mode <= 0; gen_count <= 0; rand_seed <= 8'd1;
+    //     end else if(rx_done) begin
+    //         if(m_cur == 0 && rx_data>=1 && rx_data<=5) m_cur <= rx_data;
+    //         else if(n_cur == 0 && rx_data>=1 && rx_data<=5) n_cur <= rx_data;
+    //         else if(gen_mode==0) begin
+    //             matrix_buffer[(gen_count/n_cur)][(gen_count%n_cur)] <= (rx_data <= 9) ? rx_data : 0;
+    //             gen_count <= gen_count + 1;
+    //             if(gen_count >= m_cur*n_cur) input_valid <= 1;
+    //         end else begin
+    //             gen_total <= rx_data; // ç”¨æˆ·è¾“å…¥ç”ŸæˆçŸ©é˜µæ•°é‡
+    //             gen_mode <= 1;
+    //             gen_count <= 0;
+    //         end
+    //     end
+    // end
+
+
+
+
 
 endmodule

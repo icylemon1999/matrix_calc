@@ -1,34 +1,41 @@
-// ¿ØÖÆÄ£¿é£ºÖ÷×´Ì¬»ú FSM£¨´ø´íÎóµ¹¼ÆÊ±£©
+// ä¸»æ§åˆ¶å™¨æ¨¡å—ï¼šæœ‰é™çŠ¶æ€æœºï¼Œå¸¦å€’è®¡æ—¶åŠŸèƒ½
 module controller_fsm(
-    input clk,              // ÏµÍ³Ê±ÖÓ
-    input rst_n,            // Òì²½¸´Î»£¬µÍÓĞĞ§
-    input button,           // °´¼üÈ·ÈÏ
-    input [3:0] mode_sel,   // Ä£Ê½Ñ¡Ôñ
-    input calc_done,        // ÔËËãÍê³ÉĞÅºÅ
-    input error_in,         // ´íÎóÊäÈë
-    input countdown_done,   // ĞÂÔö£ºµ¹¼ÆÊ±Íê³ÉĞÅºÅ
-    output reg [3:0] state, // µ±Ç°×´Ì¬
-    output reg start_calc,  // Æô¶¯¼ÆËãĞÅºÅ
-    output reg [3:0] op_type, // µ±Ç°²Ù×÷ÀàĞÍ
-    output reg error_led,   // ´íÎóÖ¸Ê¾ LED
-    output reg start_countdown // ĞÂÔö£ºÆô¶¯µ¹¼ÆÊ±ĞÅºÅ
+    input clk,              // ç³»ç»Ÿæ—¶é’Ÿ
+    input rst_n,            // å¼‚æ­¥å¤ä½ï¼Œä½ç”µå¹³æœ‰æ•ˆ
+    input button,           // ç¡®è®¤æŒ‰é’®
+    input [3:0] mode_sel,   // æ¨¡å¼é€‰æ‹©
+    input calc_done,        // è®¡ç®—å®Œæˆä¿¡å·
+    input error_in,         // é”™è¯¯è¾“å…¥
+    output reg [3:0] state, // å½“å‰çŠ¶æ€
+    output reg start_calc,  // å¼€å§‹è®¡ç®—ä¿¡å·
+    output reg [3:0] op_type, // å½“å‰æ“ä½œç±»å‹
+    output reg error_led,   // é”™è¯¯æŒ‡ç¤ºç¯LED
+    output reg start_countdown, // å¯åŠ¨å€’è®¡æ—¶ä¿¡å·
+    output countdown_done       // å¯¼å‡ºå€’è®¡æ—¶å®Œæˆä¿¡å·
+
+    // //ç”¨äºçŸ©é˜µæ¨¡å—çš„æ¥å£
+    // output reg start_input,      // FSM æ§åˆ¶è¾“å…¥çŸ©é˜µ
+    // output reg start_gen,        // FSM æ§åˆ¶ç”ŸæˆçŸ©é˜µ
+    // output reg start_display     // FSM æ§åˆ¶æ˜¾ç¤ºçŸ©é˜µåˆ° UART
+
 );
 
-    // ×´Ì¬±àÂë£¨±£³Ö²»±ä£©
-    parameter S0_IDLE       = 4'd0,
-              S1_MENU       = 4'd1,
-              S2_INPUT      = 4'd2,
-              S3_GEN        = 4'd3,
-              S4_DISPLAY    = 4'd4,
-              S5_COMPUTE    = 4'd5,
-              S6_ERROR      = 4'd6,
-              S7_STORE      = 4'd7,
-              S8_SELECT     = 4'd8,
-              S9_WAIT       = 4'd9;
+    // çŠ¶æ€ç¼–ç å®šä¹‰
+    parameter S0_IDLE       = 4'd0,  // ç©ºé—²çŠ¶æ€
+              S1_MENU       = 4'd1,  // èœå•æ˜¾ç¤º
+              S2_INPUT      = 4'd2,  // è¾“å…¥çŠ¶æ€
+              S3_GEN        = 4'd3,  // ç”ŸæˆçŠ¶æ€
+              S4_DISPLAY    = 4'd4,  // æ˜¾ç¤ºçŠ¶æ€
+              S5_COMPUTE    = 4'd5,  // è®¡ç®—çŠ¶æ€
+              S6_ERROR      = 4'd6,  // é”™è¯¯çŠ¶æ€
+              S7_STORE      = 4'd7,  // å­˜å‚¨çŠ¶æ€
+              S8_SELECT     = 4'd8,  // é€‰æ‹©è®¡ç®—æ–¹å¼
+              S9_WAIT       = 4'd9;  // å€’è®¡æ—¶ç­‰å¾…
 
     reg [3:0] next_state;
+    reg [25:0] wait_timer;  // 1 ç§’å€’è®¡æ—¶ï¼ˆ100 MHzï¼‰
 
-    // ×´Ì¬¼Ä´æÆ÷¸üĞÂ£¨±£³Ö²»±ä£©
+    // çŠ¶æ€å¯„å­˜å™¨æ›´æ–°
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n)
             state <= S0_IDLE;
@@ -36,75 +43,156 @@ module controller_fsm(
             state <= next_state;
     end
 
+    // å€’è®¡æ—¶è®¡æ•°å™¨é€»è¾‘
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            wait_timer <= 0;
+        end else if (state == S9_WAIT) begin
+            if (wait_timer >= 100_000_000 - 1)
+                wait_timer <= 0;
+            else
+                wait_timer <= wait_timer + 1;
+        end else begin
+            wait_timer <= 0; 
+        end
+    end
+
+    // å€’è®¡æ—¶å®Œæˆä¿¡å·
+    wire countdown_done_internal;
+    assign countdown_done_internal = 
+        (state == S9_WAIT) && (wait_timer >= 100_000_000 - 1);
+
+    assign countdown_done = countdown_done_internal;
+
     // ----------------------------
-    // ÏÂÒ»×´Ì¬Âß¼­£¨¹Ø¼üĞŞ¸Ä£©
+    // ä¸‹ä¸€çŠ¶æ€é€»è¾‘ï¼ˆç»„åˆé€»è¾‘ï¼‰
     // ----------------------------
     always @(*) begin
-        next_state = state;
+        next_state = state; // é»˜è®¤ä¿æŒ
+
         case(state)
-            S0_IDLE: next_state = S1_MENU;
+
+            S0_IDLE: begin
+                next_state = S1_MENU;
+            end
+
             S1_MENU: begin
                 if(button) begin
                     case(mode_sel)
-                        4'b0001: next_state = S2_INPUT;
-                        4'b0010: next_state = S3_GEN;
-                        4'b0100: next_state = S4_DISPLAY;
-                        4'b1000: next_state = S8_SELECT; // ÔËËãÏÈ½øÈëÑ¡Ôñ²Ù×÷Êı
+                        4'b0001: next_state = S2_INPUT;   // è¾“å…¥
+                        4'b0010: next_state = S3_GEN;     // ç”Ÿæˆ
+                        4'b0100: next_state = S4_DISPLAY; // æ˜¾ç¤º
+                        4'b1000: next_state = S8_SELECT;  // è¿›å…¥è®¡ç®—æ–¹å¼é€‰æ‹©
                         default: next_state = S1_MENU;
                     endcase
                 end
             end
-            
+
             S2_INPUT:  next_state = S7_STORE;
-            S7_STORE:  next_state = S1_MENU; // ´æ´¢Íê³É»Ø²Ëµ¥
-            
+            S7_STORE:  next_state = S1_MENU;
+
+            // é€‰æ‹©è®¡ç®—æ–¹æ³•
             S8_SELECT: begin
-                if (error_in) 
-                    next_state = S9_WAIT;    // Ñ¡Ôñ´íÎó½øÈëµ¹¼ÆÊ±
-                else 
-                    next_state = S5_COMPUTE; // Ñ¡ÔñÕıÈ·¿ªÊ¼¼ÆËã
-            end
-            
-            S3_GEN:    next_state = S1_MENU;
-            S4_DISPLAY: next_state = S1_MENU;
-            
-            S5_COMPUTE: begin
                 if (error_in)
-                    next_state = S9_WAIT;    // ¼ÆËã´íÎó½øÈëµ¹¼ÆÊ±
-                else if (calc_done)
-                    next_state = S4_DISPLAY; // ¼ÆËãÍê³ÉÏÔÊ¾½á¹û
-                else
+                    next_state = S6_ERROR;
+                else if (button)        // å¿…é¡»æŒ‰æŒ‰é’®æ‰è¿›å…¥è®¡ç®—
                     next_state = S5_COMPUTE;
             end
-            
-            S6_ERROR:  next_state = S9_WAIT; // ´íÎó×´Ì¬Ö±½Ó½øÈëµ¹¼ÆÊ±
-            
-            S9_WAIT: begin
-                if (button) 
-                    next_state = S8_SELECT;  // µ¹¼ÆÊ±ÄÚ°´¼ü£ºÖØĞÂÑ¡Ôñ²Ù×÷Êı
-                else if (countdown_done)
-                    next_state = S1_MENU;    // µ¹¼ÆÊ±½áÊø£º»Ø²Ëµ¥
-                else
-                    next_state = S9_WAIT;    // ¼ÌĞøµ¹¼ÆÊ±
+
+            S3_GEN:     next_state = S1_MENU;
+            S4_DISPLAY: next_state = S1_MENU;
+
+            S5_COMPUTE: begin
+                if (error_in)
+                    next_state = S6_ERROR;
+                else if (calc_done)
+                    next_state = S4_DISPLAY;
             end
-            
-            default:   next_state = S1_MENU;
+
+            S6_ERROR: next_state = S9_WAIT;
+
+            S9_WAIT: begin
+                if (button)
+                    next_state = S8_SELECT;       // è¿”å›é€‰æ‹©ç•Œé¢
+                else if (countdown_done_internal)
+                    next_state = S1_MENU;         // è‡ªåŠ¨è¿”å›èœå•
+            end
+
+            default: next_state = S1_MENU;
+
         endcase
     end
 
+
     // ----------------------------
-    // Êä³öÂß¼­£¨ĞŞ¸Ä£©
+    // è¾“å‡ºé€»è¾‘
     // ----------------------------
     always @(*) begin
-        start_calc = (state == S5_COMPUTE);
-        error_led  = (state == S6_ERROR) || (state == S9_WAIT); // ´íÎóºÍµ¹¼ÆÊ±¶¼ÁÁLED
-        start_countdown = (state == S9_WAIT); // Æô¶¯µ¹¼ÆÊ±
+        start_calc       = (state == S5_COMPUTE);
+        error_led        = (state == S6_ERROR) || (state == S9_WAIT);
+        start_countdown  = (state == S9_WAIT);
+
         
-        // ²Ù×÷ÀàĞÍÊä³ö
-        if (state == S8_SELECT || state == S9_WAIT)
-            op_type = {1'b0, mode_sel[2:0]}; // Ñ¡ÔñºÍµ¹¼ÆÊ±ÆÚ¼ä±£³Ö²Ù×÷ÀàĞÍ
-        else
-            op_type = 4'd0;
+
+        // é»˜è®¤æ— æ“ä½œ
+        op_type = 4'b0000;
+
+        // åªæœ‰åœ¨èœå•ã€é€‰æ‹©ã€è®¡ç®—æˆ–æ˜¾ç¤ºçŠ¶æ€æ‰æ˜¾ç¤º op_type
+        if ( state == S8_SELECT ) begin
+            case(mode_sel)
+                4'b0001: op_type = 4'b0001; // è½¬ç½®
+                4'b0010: op_type = 4'b0010; // åŠ æ³•
+                4'b0100: op_type = 4'b0100; // æ ‡é‡ä¹˜æ³•
+                4'b1000: op_type = 4'b1000; // çŸ©é˜µä¹˜æ³•
+                4'b1111: op_type = 4'b1111; // å·ç§¯
+                default: op_type = 4'b0000; // éæ³•æˆ–æ— æ“ä½œ
+            endcase
+        end
     end
+
+
+
+
+
+
+
+    // //è¾“å‡ºé€»è¾‘éœ€è¦æ›´æ”¹
+    // // ----------------------------
+    // // è¾“å‡ºé€»è¾‘
+    // // ----------------------------
+    // always @(*) begin
+    //     // é»˜è®¤è¾“å‡º
+    //     start_calc      = 0;
+    //     error_led       = 0;
+    //     start_countdown = 0;
+    //     op_type         = 4'b0000;
+    //     // <<< æ–°å¢/ä¿®æ”¹ï¼šFSM æ§åˆ¶çŸ©é˜µæ¨¡å—
+    //     start_input     = 0;
+    //     start_gen       = 0;
+    //     start_display   = 0;
+
+    //     error_led = (state == S6_ERROR) || (state == S9_WAIT);
+    //     start_countdown = (state == S9_WAIT);
+
+    //     case(state)
+    //         S2_INPUT: start_input = 1;   // <<< FSM æ§åˆ¶è¾“å…¥çŸ©é˜µ
+    //         S3_GEN:   start_gen   = 1;   // <<< FSM æ§åˆ¶ç”ŸæˆçŸ©é˜µ
+    //         S5_COMPUTE: start_calc = 1;  // <<< FSM æ§åˆ¶è®¡ç®—æ¨¡å—
+    //         S4_DISPLAY: start_display = 1; // <<< FSM æ§åˆ¶ UART è¾“å‡º
+    //         default: ;
+    //     endcase
+
+    //     // op_type æ˜¾ç¤ºè¿ç®—ç±»å‹
+    //     if (state == S1_MENU || state == S8_SELECT || state == S5_COMPUTE || state == S4_DISPLAY) begin
+    //         case(mode_sel)
+    //             4'b0001: op_type = 4'b0001; // è½¬ç½®
+    //             4'b0010: op_type = 4'b0010; // åŠ æ³•
+    //             4'b0100: op_type = 4'b0100; // æ ‡é‡ä¹˜æ³•
+    //             4'b1000: op_type = 4'b1000; // çŸ©é˜µä¹˜æ³•
+    //             4'b1111: op_type = 4'b1111; // å·ç§¯
+    //             default: op_type = 4'b0000;
+    //         endcase
+    //     end
+    // end
 
 endmodule

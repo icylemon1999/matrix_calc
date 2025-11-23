@@ -1,74 +1,98 @@
-// Æß¶ÎÊıÂë¹ÜÏÔÊ¾Ä£¿é£¨Ö§³ÖÔËËãÀàĞÍÏÔÊ¾£©
+// ä¸ƒæ®µæ•°ç ç®¡æ˜¾ç¤ºæ¨¡å—ï¼ˆå®Œå…¨é‡å†™ç‰ˆï¼‰
 module seg_display(
-    input clk,               // ÏµÍ³Ê±ÖÓ
-    input [3:0] state,       // FSM ×´Ì¬ÊäÈë
-    input [3:0] op_type,     // ĞÂÔö£ºÔËËãÀàĞÍÊäÈë
-    output reg [6:0] seg     // Æß¶ÎÊıÂë¹ÜÊä³ö£¨a-g£©
+    input clk,                 // ç³»ç»Ÿæ—¶é’Ÿ
+    input [3:0] state,         // å½“å‰çŠ¶æ€
+    input [3:0] op_type,       // å·²ç¡®è®¤çš„è®¡ç®—æ–¹å¼
+    output reg [6:0] seg       // ä¸ƒæ®µæ•°ç ç®¡
 );
 
+    // çŠ¶æ€ç¼–ç ï¼ˆä¸ä½ çš„ FSM ä¸€è‡´ï¼‰
+    localparam S0_IDLE    = 4'd0,
+               S1_MENU    = 4'd1,
+               S2_INPUT   = 4'd2,
+               S3_GEN     = 4'd3,
+               S4_DISPLAY = 4'd4,
+               S5_COMPUTE = 4'd5,
+               S6_ERROR   = 4'd6,
+               S7_STORE   = 4'd7,
+               S8_SELECT  = 4'd8,
+               S9_WAIT    = 4'd9;
+
     // ----------------------------
-    // µ¹¼ÆÊ±¼ÆÊı¼Ä´æÆ÷
+    // å€’è®¡æ—¶è®¡æ•°å™¨ï¼šåªåœ¨ WAIT çŠ¶æ€è¿è¡Œ
     // ----------------------------
-    reg [25:0] clk_count;    // Ê±ÖÓ¼ÆÊı£¬ÓÃÓÚ²úÉú 1 Ãë½ÚÅÄ£¨¼ÙÉè 100 MHz£©
-    reg [3:0] sec_count;     // Ãë¼ÆÊı£¨Ö§³Ö 0~9 Ãëµ¹¼ÆÊ±£©
+    reg [25:0] clk_count = 0;
+    reg [3:0]  sec_count = 9;
 
     always @(posedge clk) begin
-        if(state == 4'd9) begin
+        if(state == S9_WAIT) begin
             if(clk_count >= 100_000_000 - 1) begin
                 clk_count <= 0;
                 if(sec_count != 0)
                     sec_count <= sec_count - 1;
-            end else begin
-                clk_count <= clk_count + 1;
             end
-        end else begin
+            else
+                clk_count <= clk_count + 1;
+        end
+        else begin
             clk_count <= 0;
-            sec_count <= 4'd9;
+            sec_count <= 9;
         end
     end
 
     // ----------------------------
-    // ÊıÂë¹ÜÏÔÊ¾Âß¼­£¨¹Ø¼üĞŞ¸Ä£©
+    // ä¸ƒæ®µæ•°ç ç®¡ç¼–ç ï¼ˆå…±é˜³æï¼‰å€’è®¡æ—¶
+    // ----------------------------
+    function [6:0] seg_num(input [3:0] n);
+        case(n)
+            4'd9: seg_num = 7'b1111011;
+            4'd8: seg_num = 7'b1111111;
+            4'd7: seg_num = 7'b1110000;
+            4'd6: seg_num = 7'b1011111;
+            4'd5: seg_num = 7'b1011011;
+            4'd4: seg_num = 7'b0110011;
+            4'd3: seg_num = 7'b1111001;
+            4'd2: seg_num = 7'b1101101;
+            4'd1: seg_num = 7'b0110000;
+            4'd0: seg_num = 7'b1111110;
+            default: seg_num = 7'b0000000;
+        endcase
+    endfunction
+
+    // å­—æ¯æ®µç 
+    function [6:0] seg_char(input [3:0] op);
+        case(op)
+            4'b0001: seg_char = 7'b0000111; // T è½¬ç½®
+            4'b0010: seg_char = 7'b1110111; // A åŠ æ³•
+            4'b0100: seg_char = 7'b0011111; // B æ ‡é‡ä¹˜æ³•
+            4'b1000: seg_char = 7'b1001110; // C çŸ©é˜µä¹˜æ³•
+            4'b1111: seg_char = 7'b1111110; //D å·ç§¯
+            default: seg_char = 7'b0000000;
+        endcase
+    endfunction
+
+    // ----------------------------
+    // æœ€ç»ˆæ˜¾ç¤ºé€»è¾‘ï¼ˆæ ¸å¿ƒï¼‰
     // ----------------------------
     always @(*) begin
-        if(state == 4'd9) begin
-            // µÈ´ı×´Ì¬ÏÔÊ¾µ¹¼ÆÊ±Êı×Ö
-            case(sec_count)
-                4'd9: seg = 7'b0001110; // 9
-                4'd8: seg = 7'b0000000; // 8
-                4'd7: seg = 7'b0000110; // 7
-                4'd6: seg = 7'b0100000; // 6
-                4'd5: seg = 7'b0010010; // 5
-                4'd4: seg = 7'b0110000; // 4
-                4'd3: seg = 7'b0000110; // 3
-                4'd2: seg = 7'b0010010; // 2
-                4'd1: seg = 7'b1001111; // 1
-                4'd0: seg = 7'b0000001; // 0
-                default: seg = 7'b1111111;
-            endcase
-        end else if(state == 4'd8) begin
-            // ĞÂÔö£ºÔÚÑ¡Ôñ²Ù×÷Êı×´Ì¬ÏÔÊ¾ÔËËãÀàĞÍ
-            case(op_type)
-                4'b0001: seg = 7'b0000111; // T - ×ªÖÃ
-                4'b0010: seg = 7'b0001000; // A - ¼Ó·¨  
-                4'b0100: seg = 7'b0000011; // B - ±êÁ¿³Ë·¨
-                4'b1000: seg = 7'b1000110; // C - ¾ØÕó³Ë·¨
-                default: seg = 7'b1111111; // Ä¬ÈÏÈ«Ãğ
-            endcase
-        end else begin
-            // ÆäËû×´Ì¬¸ù¾İFSM×´Ì¬ÏÔÊ¾×Ö·û
-            case(state)
-                4'd0: seg = 7'b1111110; // I - ¿ÕÏĞ£¨S0_IDLE£©
-                4'd1: seg = 7'b0110000; // n - ²Ëµ¥£¨S1_MENU£©
-                4'd2: seg = 7'b1000000; // A - ÓÃ»§ÊäÈë£¨S2_INPUT£©
-                4'd3: seg = 7'b0001000; // G - Éú³É¾ØÕó£¨S3_GEN£©
-                4'd4: seg = 7'b0001001; // d - ÏÔÊ¾½á¹û£¨S4_DISPLAY£©
-                4'd5: seg = 7'b0000010; // C - ÔËËãÖ´ĞĞ£¨S5_COMPUTE£©
-                4'd6: seg = 7'b0000110; // E - ÏµÍ³´íÎó£¨S6_ERROR£©
-                4'd7: seg = 7'b0100001; // S7_STORE - ´æ´¢
-                default: seg = 7'b1111111; // ÆäËû×´Ì¬È«Ãğ
-            endcase
-        end
+        case(state)
+
+            // å€’è®¡æ—¶çŠ¶æ€ï¼šæ˜¾ç¤ºæ•°å­— 9 â†’ 0
+            S9_WAIT: begin
+                seg = seg_num(sec_count);
+            end
+
+            // è®¡ç®—ä¸­ / æ˜¾ç¤ºç»“æœï¼šæ˜¾ç¤ºå·²ç¡®è®¤çš„ op_type
+            S5_COMPUTE,
+            S4_DISPLAY: begin
+                seg = seg_char(op_type);
+            end
+
+            // å…¶å®ƒçŠ¶æ€å…¨éƒ¨ä¸æ˜¾ç¤º
+            default: begin
+                seg = 7'b0000000;
+            end
+        endcase
     end
 
 endmodule
